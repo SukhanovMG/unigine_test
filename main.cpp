@@ -93,6 +93,127 @@ void read_args(int argc, char* argv[], size_t& n, string& ifname, string& ofname
     ofname = argv[argn];
 }
 
+void process_line(const string& line, regex& re)
+{
+    for (auto i = sregex_iterator(line.begin(), line.end(), re); i != sregex_iterator(); i++)
+    {
+        urls_count++;
+        smatch match = *i;
+        inc_or_add(domains, match[1]);
+        if (match[2].length() > 0)
+            inc_or_add(paths, match[2]);
+        else
+            inc_or_add(paths, "/");
+    }
+}
+
+typedef string::const_iterator scit;
+typedef pair<scit, scit> find_res;
+
+enum class pstate {
+    h = 0, t, t2, p, s, scol, slash, slash2, end
+};
+
+find_res find_proto(scit begin, scit end)
+{
+    pstate state = pstate::h;
+    find_res res = make_pair(end, end);
+    for (scit c = begin; c != end; c++)
+    {
+        switch(state)
+        {
+        case pstate::h:
+            if (*c == 'h')
+            {
+                state = pstate::t;
+                res.first = c;
+            }
+            break;
+        case pstate::t:
+            if (*c == 't') state = pstate::t2; else state = pstate::h;
+            break;
+        case pstate::t2:
+            if (*c == 't') state = pstate::p; else state = pstate::h;
+            break;
+        case pstate::p:
+            if (*c == 'p') state = pstate::s; else state = pstate::h;
+                break;
+        case pstate::s:
+            if (*c == 's')
+            {
+                state = pstate::scol;
+                break;
+            }
+            // fall through
+        case pstate::scol:
+            if (*c == ':') state = pstate::slash; else state = pstate::h;
+            break;
+        case pstate::slash:
+            if (*c == '/') state = pstate::slash2; else state = pstate::h;
+            break;
+        case pstate::slash2:
+            if (*c == '/')
+            {
+                res.second = c + 1;
+                return res;
+            }
+            else state = pstate::h;
+        }
+    }
+    return make_pair(end, end);
+}
+
+scit find_domain(scit begin, scit end)
+{
+    scit res = begin;
+    for (scit it = begin; it != end; it++)
+    {
+        res = it;
+        if (!isalnum(*it) && *it != '.' && *it != '-')
+            break;
+    }
+    return res;
+}
+
+scit find_path(scit begin, scit end)
+{
+    scit res = begin;
+    for (scit it = begin; it != end; it++)
+    {
+        res = it;
+        if (!isalnum(*it) && *it != '.' && *it != ',' && *it != '/' && *it != '+' && *it != '_')
+            break;
+    }
+    return res;
+}
+
+void process_line(const string& line)
+{
+    scit cur_it = line.begin();
+    while (true)
+    {
+        find_res proto_res = find_proto(cur_it, line.end());
+        if (proto_res.first == line.end())
+            break;
+        cur_it = proto_res.second;
+        scit domain_start = cur_it;
+        scit domain_end = find_domain(domain_start, line.end());
+        if (domain_end == domain_start)
+            continue;
+        cur_it = domain_end;
+        scit path_start = cur_it;
+        scit path_end = find_path(path_start, line.end());
+        cur_it = path_end;
+
+        string domain = string(domain_start, domain_end);
+        string path = path_start == path_end ? "/" : string(path_start, path_end);
+
+        urls_count++;
+        inc_or_add(domains, domain);
+        inc_or_add(paths, path);
+    }
+}
+
 int main(int argc, char* argv[])
 {
     try
@@ -113,16 +234,8 @@ int main(int argc, char* argv[])
         regex re("https?://([a-zA-Z0-9.-]+)(/[a-zA-Z0-9.,/+_]*)?");
         while(getline(infile, line))
         {
-            for (auto i = sregex_iterator(line.begin(), line.end(), re); i != sregex_iterator(); i++)
-            {
-                urls_count++;
-                smatch match = *i;
-                inc_or_add(domains, match[1]);
-                if (match[2].length() > 0)
-                    inc_or_add(paths, match[2]);
-                else
-                    inc_or_add(paths, "/");
-            }
+            //process_line(line, re);
+            process_line(line);
         }
 
         show_top(outfile, domains, paths, N);
