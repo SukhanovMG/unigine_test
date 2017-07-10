@@ -178,11 +178,14 @@ scit find_domain(scit begin, scit end)
 scit find_path(scit begin, scit end)
 {
     scit res = begin;
-    for (scit it = begin; it != end; it++)
+    if (*begin == '/')
     {
-        res = it;
-        if (!isalnum(*it) && *it != '.' && *it != ',' && *it != '/' && *it != '+' && *it != '_')
-            break;
+        for (scit it = begin + 1; it != end; it++)
+        {
+            res = it;
+            if (!isalnum(*it) && *it != '.' && *it != ',' && *it != '/' && *it != '+' && *it != '_')
+                break;
+        }
     }
     return res;
 }
