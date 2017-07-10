@@ -44,16 +44,30 @@ void show_map_top(ostream& os, string_counter& m, size_t count)
     }
 }
 
+void show_map_top2(ostream& os, string_counter& m, size_t count)
+{
+    vector<string_counter::value_type*> top_m(m.size());
+    for (auto& i : m)
+        top_m.emplace_back(&i);
+    size_t top_size = count > 0 ? count : m.size();
+    partial_sort(top_m.begin(), top_m.begin() + top_size, top_m.end(),
+                      [](string_counter::value_type *l, string_counter::value_type *r)
+                      {
+                        return l->second != r->second ? l->second > r->second : l->first < r->first;
+                      });
+    top_m.erase(top_m.begin() + top_size, top_m.end());
+}
+
 // показать статистику, топ доменов и путей
 void show_top(ostream& os, string_counter& domains, string_counter& paths, size_t count)
 {
     os << "total urls " << urls_count << ", domains " << domains.size() << ", paths " << paths.size() << endl;
     os << endl;
     os << "top domains" << endl;
-    show_map_top(os, domains, count);
+    show_map_top2(os, domains, count);
     os << endl;
     os << "top paths" << endl;
-    show_map_top(os, paths, count);
+    show_map_top2(os, paths, count);
 }
 
 // прочитать аргументы командной строки
@@ -93,6 +107,10 @@ void read_args(int argc, char* argv[], size_t& n, string& ifname, string& ofname
     ofname = argv[argn];
 }
 
+#ifdef USE_REGEX
+
+#pragma message ("Using regexp")
+
 void process_line(const string& line, regex& re)
 {
     for (auto i = sregex_iterator(line.begin(), line.end(), re); i != sregex_iterator(); i++)
@@ -106,6 +124,8 @@ void process_line(const string& line, regex& re)
             inc_or_add(paths, "/");
     }
 }
+
+#else
 
 typedef string::const_iterator scit;
 typedef pair<scit, scit> find_res;
@@ -217,6 +237,25 @@ void process_line(const string& line)
     }
 }
 
+#endif
+
+void process_file(ifstream& infile)
+{
+#ifdef USE_REGEX
+    regex re("https?://([a-zA-Z0-9.-]+)(/[a-zA-Z0-9.,/+_]*)?");
+#endif
+
+    string line;
+    while(getline(infile, line))
+    {
+#ifdef USE_REGEX
+        process_line(line, re);
+#else
+        process_line(line);
+#endif
+    }
+}
+
 int main(int argc, char* argv[])
 {
     try
@@ -233,13 +272,7 @@ int main(int argc, char* argv[])
         if (!outfile.is_open())
             throw runtime_error("Can't open output file");
 
-        string line;
-        regex re("https?://([a-zA-Z0-9.-]+)(/[a-zA-Z0-9.,/+_]*)?");
-        while(getline(infile, line))
-        {
-            //process_line(line, re);
-            process_line(line);
-        }
+        process_file(infile);
 
         show_top(outfile, domains, paths, N);
     }
