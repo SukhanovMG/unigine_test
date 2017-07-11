@@ -18,6 +18,7 @@ string_counter paths;
 // инкрементировать счётчик ключа или добавить новый
 void inc_or_add(string_counter& m, const string& key)
 {
+#ifdef USE_INC_OR_ADD_WITH_AT
     try
     {
         m.at(key)++;
@@ -26,8 +27,17 @@ void inc_or_add(string_counter& m, const string& key)
     {
         m[key] = 1;
     }
+#else
+    auto it = m.find(key);
+    if (it != m.end())
+	it->second++;
+    else
+	m[key] = 1;
+#endif
 }
 
+#ifdef USE_SHOW_MAP_TOP1
+#pragma message("USE OLD MAP TOP")
 // показать топ ключей в string_counter, по количеству значений
 void show_map_top(ostream& os, string_counter& m, size_t count)
 {
@@ -43,20 +53,26 @@ void show_map_top(ostream& os, string_counter& m, size_t count)
         os << d.second << " " << d.first << endl;
     }
 }
-
-void show_map_top2(ostream& os, string_counter& m, size_t count)
+#else
+void show_map_top(ostream& os, string_counter& m, size_t count)
 {
-    vector<string_counter::value_type*> top_m(m.size());
+    vector<pair<const string_counter::key_type*, string_counter::mapped_type>> top_m;
+    top_m.reserve(m.size());
     for (auto& i : m)
-        top_m.emplace_back(&i);
+        top_m.emplace_back(&i.first, i.second);
     size_t top_size = count > 0 ? count : m.size();
     partial_sort(top_m.begin(), top_m.begin() + top_size, top_m.end(),
-                      [](string_counter::value_type *l, string_counter::value_type *r)
+                      [](pair<const string_counter::key_type*, string_counter::mapped_type> l, pair<const string_counter::key_type*, string_counter::mapped_type> r)
                       {
-                        return l->second != r->second ? l->second > r->second : l->first < r->first;
+                        return l.second != r.second ? l.second > r.second : *(l.first) < *(r.first);
                       });
     top_m.erase(top_m.begin() + top_size, top_m.end());
+    for (auto& d : top_m)
+    {
+        os << d.second << " " << *(d.first) << endl;
+    }
 }
+#endif
 
 // показать статистику, топ доменов и путей
 void show_top(ostream& os, string_counter& domains, string_counter& paths, size_t count)
@@ -64,10 +80,10 @@ void show_top(ostream& os, string_counter& domains, string_counter& paths, size_
     os << "total urls " << urls_count << ", domains " << domains.size() << ", paths " << paths.size() << endl;
     os << endl;
     os << "top domains" << endl;
-    show_map_top2(os, domains, count);
+    show_map_top(os, domains, count);
     os << endl;
     os << "top paths" << endl;
-    show_map_top2(os, paths, count);
+    show_map_top(os, paths, count);
 }
 
 // прочитать аргументы командной строки
